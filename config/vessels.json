@@ -1,0 +1,15 @@
+{
+  "_note": "Representative 'standard' ships per class. All figures are ENGINEERING ASSUMPTIONS for a typical modern (eco) ship; replace with actual vessel particulars (Equasis / owner Q88) at fixing time.",
+  "Handysize": {"dwt": 35000, "design_draft_m": 10.1, "loa_m": 180, "beam_m": 30.0, "tpc": 46,  "constants_t": 1200, "geared": true,
+                "speed_laden_kn": 12.5, "speed_ballast_kn": 13.0, "fuel_laden_tpd": 22, "fuel_ballast_tpd": 20, "fuel_port_tpd": 3,
+                "port_cost_usd": 90000,  "gear_rate_tpd": 8000},
+  "Supramax":  {"dwt": 58000, "design_draft_m": 12.8, "loa_m": 200, "beam_m": 32.3, "tpc": 58,  "constants_t": 1800, "geared": true,
+                "speed_laden_kn": 12.5, "speed_ballast_kn": 13.0, "fuel_laden_tpd": 28, "fuel_ballast_tpd": 25, "fuel_port_tpd": 4,
+                "port_cost_usd": 110000, "gear_rate_tpd": 12000},
+  "Panamax":   {"dwt": 82000, "design_draft_m": 14.5, "loa_m": 229, "beam_m": 32.3, "tpc": 71,  "constants_t": 2200, "geared": false,
+                "speed_laden_kn": 12.5, "speed_ballast_kn": 13.0, "fuel_laden_tpd": 32, "fuel_ballast_tpd": 29, "fuel_port_tpd": 4,
+                "port_cost_usd": 150000, "gear_rate_tpd": 0},
+  "Capesize":  {"dwt": 180000, "design_draft_m": 18.2, "loa_m": 292, "beam_m": 45.0, "tpc": 122, "constants_t": 3800, "geared": false,
+                "speed_laden_kn": 12.0, "speed_ballast_kn": 13.0, "fuel_laden_tpd": 50, "fuel_ballast_tpd": 42, "fuel_port_tpd": 5,
+                "port_cost_usd": 250000, "gear_rate_tpd": 0}
+}

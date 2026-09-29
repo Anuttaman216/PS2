@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "freightsaarthi",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "serve.py"
+      ],
+      "port": 8000,
+      "autoPort": true
+    },
+    {
+      "name": "cockpit",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "outputs"
+      ],
+      "port": 8765
+    }
+  ]
+}

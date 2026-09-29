@@ -1,0 +1,10 @@
+/* footer waves: long path + one-period translation for a seamless loop */
+@keyframes waveF{from{transform:translateX(0)}to{transform:translateX(-720px)}}
+.fw1{animation:waveF 18s linear infinite}.fw2{animation:waveF 12s linear infinite reverse}
+
+/* data packets flowing through the pipeline */
+.pipe::before,.pipe::after{content:"";position:absolute;top:47px;left:2%;width:12px;height:5px;border-radius:3px;background:#fbbf24;box-shadow:0 0 14px #fbbf24;animation:packet 5s linear infinite;opacity:0}
+.pipe::after{background:#7dd3fc;box-shadow:0 0 14px #38bdf8;animation-delay:2.5s}
+.pipe.flow::before,.pipe.flow::after{opacity:1}
+@keyframes packet{0%{left:2%;opacity:0}8%{opacity:1}92%{opacity:1}100%{left:97%;opacity:0}}
+@media(max-width:900px){.pipe::before,.pipe::after{display:none}}

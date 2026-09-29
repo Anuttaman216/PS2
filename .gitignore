@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+scratch/
+outputs/cache/
+.DS_Store
+Thumbs.db
+# Claude Code local settings (keep the shared launch.json)
+.claude/*
+!.claude/launch.json

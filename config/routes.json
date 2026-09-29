@@ -1,0 +1,20 @@
+{
+  "_note": "Sea distances in nautical miles from load port to PARADIP (reference discharge port). Distance to other East Coast ports = base + that port's offset_nm. All distances are APPROXIMATE (+/-5%); replace with a distance engine (e.g. searoute / Netpas / BlueWater). 'routing' = chokepoints on the path; alt = alternative routing if a chokepoint is disrupted or draft-infeasible.",
+  "HAY_POINT":   {"nm": 4650, "routing": ["LOMBOK"], "alt": null, "small_ship_nm": 4250, "small_ship_routing": ["TORRES"]},
+  "GLADSTONE":   {"nm": 4850, "routing": ["LOMBOK"], "alt": null},
+  "NEWCASTLE":   {"nm": 5300, "routing": ["BASS_OR_SOUTH_AUS"], "alt": null},
+  "HAMPTON_RDS": {"nm": 8700, "routing": ["SUEZ"], "alt": {"nm": 11800, "routing": ["CAPE_GOOD_HOPE"]}},
+  "NACALA":      {"nm": 4300, "routing": [], "alt": null},
+  "BEIRA":       {"nm": 4600, "routing": [], "alt": null},
+  "VOSTOCHNY":   {"nm": 5400, "routing": ["MALACCA"], "alt": null},
+  "UST_LUGA":    {"nm": 8000, "routing": ["SUEZ"], "alt": {"nm": 12000, "routing": ["CAPE_GOOD_HOPE"]}},
+  "MUARA_BERAU": {"nm": 2800, "routing": ["MALACCA"], "alt": {"nm": 3100, "routing": ["SUNDA"]}},
+  "TANJUNG_BARA":{"nm": 2850, "routing": ["MALACCA"], "alt": null},
+  "_backhaul": {
+    "_note": "Positioning / triangulation legs used by the idle-time manager (approximate).",
+    "PARADIP->QINGDAO_ironore": {"nm": 4050, "laden": true,  "cargo": "iron ore / pellets (East Coast India exports)"},
+    "QINGDAO->HAY_POINT":       {"nm": 3900, "laden": false},
+    "PARADIP->MUARA_BERAU":     {"nm": 2800, "laden": false, "cargo": "ballast to Indonesia for short-haul coal relet"},
+    "MUARA_BERAU->PARADIP":     {"nm": 2800, "laden": true,  "cargo": "Indonesian coal (thermal / PCI) relet or own stem"}
+  }
+}

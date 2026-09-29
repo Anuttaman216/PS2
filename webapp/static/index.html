@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FreightSaarthi · Charter with foresight</title>
+<meta name="description" content="Intelligent freight forecasting & charter decision system for SAIL's coal imports to India's East Coast (SIH 2026 · PS 26006).">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/landing.css">
+<link rel="stylesheet" href="/static/css/landing-fix.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M3 20h26l-4 7H7z' fill='%2338bdf8'/%3E%3Cpath d='M9 20V9h9v11' fill='%23fbbf24'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- ===== preloader: a bulk carrier crossing the waves ===== -->
+<div id="preloader" aria-hidden="true">
+  <div class="pl-inner">
+    <svg viewBox="0 0 400 120" class="pl-ship">
+      <g class="pl-boat"><path d="M40 70 H300 L285 92 H62 Z" fill="#0f1b2d" stroke="#38bdf8" stroke-width="2"/>
+        <rect x="52" y="44" width="30" height="26" rx="2" fill="#e2e8f0"/><rect x="56" y="36" width="10" height="9" fill="#94a3b8"/>
+        <g fill="#111" stroke="#475569"><path d="M100 70 Q115 58 130 70Z"/><path d="M140 70 Q155 56 170 70Z"/><path d="M180 70 Q195 57 210 70Z"/><path d="M220 70 Q235 56 250 70Z"/><path d="M258 70 Q272 59 286 70Z"/></g></g>
+      <path class="pl-wave w1" d="M0 90 Q25 82 50 90 T100 90 T150 90 T200 90 T250 90 T300 90 T350 90 T400 90 T450 90 T500 90 V120 H0Z"/>
+      <path class="pl-wave w2" d="M0 96 Q25 88 50 96 T100 96 T150 96 T200 96 T250 96 T300 96 T350 96 T400 96 T450 96 T500 96 V120 H0Z"/>
+    </svg>
+    <div class="pl-text mono"><span id="plMsg">Charting the course</span><span class="pl-dots">...</span></div>
+    <div class="pl-bar"><i id="plBar"></i></div>
+  </div>
+</div>
+
+<!-- ===== voyage scroll-progress: ship sails Hay Point -> Paradip as you scroll ===== -->
+<div class="voyage" aria-hidden="true"><span class="mono">HAY POINT</span><div class="voyage-track"><div class="voyage-fill" id="vFill"></div><div class="voyage-ship" id="vShip">▶</div></div><span class="mono">PARADIP</span></div>
+
+<nav class="topnav" id="topnav">
+  <a href="#top" class="brand"><svg viewBox="0 0 32 32" width="28" height="28"><circle cx="16" cy="16" r="14" fill="none" stroke="#38bdf8" stroke-width="1.6"/><path d="M16 4v24M4 16h24" stroke="#38bdf8" stroke-width="1" opacity=".5"/><path d="M16 7l3 9-3 9-3-9z" fill="#fbbf24"/></svg><span>Freight<b>Saarthi</b></span></a>
+  <div class="navlinks"><a href="#challenge">Challenge</a><a href="#why">Why it matters</a><a href="#fit">Will it fit?</a><a href="#how">How it works</a><a href="#results">Proof</a><a href="#modules">Modules</a></div>
+  <a href="/app" class="btn primary sm">Launch cockpit <span class="arr">→</span></a>
+</nav>
+
+<!-- ===== HERO ===== -->
+<header class="hero" id="top">
+  <canvas id="heroMap" aria-label="Animated map of coal shipping lanes to India's East Coast"></canvas>
+  <div class="hero-vignette"></div>
+  <div class="compass" id="compass"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="92" fill="none" stroke="rgba(125,180,255,.25)"/><circle cx="100" cy="100" r="70" fill="none" stroke="rgba(125,180,255,.15)" stroke-dasharray="2 4"/>
+    <g class="ticks" stroke="rgba(125,180,255,.35)"></g><path d="M100 14 L110 100 L100 186 L90 100Z" fill="rgba(251,191,36,.35)"/><path d="M14 100 L100 90 L186 100 L100 110Z" fill="rgba(56,189,248,.25)"/>
+    <text x="100" y="10" text-anchor="middle">N</text><text x="194" y="104" text-anchor="middle">E</text><text x="100" y="199" text-anchor="middle">S</text><text x="6" y="104" text-anchor="middle">W</text></svg></div>
+  <div class="hero-content">
+    <div class="eyebrow reveal-now"><span class="dot"></span> SIH 2026 · PS 26006 · Ministry of Steel · SAIL</div>
+    <h1 class="hero-title" data-split>Forecast the freight.<br>Charter with <em>foresight.</em></h1>
+    <p class="hero-sub">Intelligent freight forecasting &amp; chartering for <span id="typed" class="typed"></span><span class="caret">|</span></p>
+    <p class="hero-lede reveal-now d3">From <b>reactive daily-spot fixtures</b> to <b>proactive multi-voyage contracts</b> - vessel, parcel, contract and timing decisions for coking coal from Australia, the US, Mozambique, Russia and Indonesia into Paradip, Dhamra, Vizag, Gangavaram, Gopalpur, Haldia and Sandheads.</p>
+    <div class="cta reveal-now d4"><a href="/app" class="btn primary">Launch the cockpit <span class="arr">→</span></a><a href="#modules" class="btn ghost">Explore endpoints</a></div>
+    <div class="hero-live reveal-now d5" id="heroLive"></div>
+  </div>
+  <div class="map-legend reveal-now d5"><span><i style="background:#38bdf8"></i>Capesize</span><span><i style="background:#2dd4bf"></i>Panamax</span><span><i style="background:#fbbf24"></i>Supramax</span><span><i style="background:#c4b5fd"></i>Handysize</span><span><i class="cape"></i>Cape-of-Good-Hope diversion</span><span><i class="dia"></i>Chokepoint</span></div>
+  <div class="map-tip" id="mapTip"></div>
+  <a href="#challenge" class="scroll-cue"><span class="mouse"><span></span></span><span class="mono">scroll to set sail</span></a>
+  <div class="ticker"><div class="ticker-label mono">MARKET WIRE</div><div class="ticker-win"><div class="ticker-track" id="ticker"></div></div></div>
+</header>
+
+<!-- ===== THE CHALLENGE (sticky scrollytelling) ===== -->
+<section id="challenge" class="story">
+  <div class="section-head" data-reveal><span class="kicker">01 · The challenge</span><h2 data-split>Today, every cargo is a new bet on a volatile market.</h2></div>
+  <div class="story-wrap">
+    <div class="story-sticky">
+      <div class="story-card glass">
+        <div class="story-top"><span class="mono small" id="storyTag">CAPESIZE TCE · 104 WEEKS</span><span class="story-big mono" id="storyBig">Daily</span></div>
+        <canvas id="storyChart"></canvas>
+        <div class="story-foot mono small" id="storyFoot">each red tick = a single spot fixture negotiated from scratch</div>
+      </div>
+    </div>
+    <div class="story-steps">
+      <article class="step" data-step="0"><span class="num mono">A</span><h3>Reactive, daily market exploration</h3><p>Coal parcels are chartered one by one on the spot market, a few weeks before loading. Nothing tells the desk whether today's rate is a peak or a trough, so it cannot pick its moment to enter the market.</p></article>
+      <article class="step" data-step="1"><span class="num mono">B</span><h3>A market that swings wildly</h3><p>Dry-bulk freight is among the most volatile prices in the world. In two years the Capesize rate moved by <b id="swingTxt">~100%</b> between trough and peak. One badly timed fixture can erase a quarter's savings.</p></article>
+      <article class="step" data-step="2"><span class="num mono">C</span><h3>Ports that decide the ship</h3><p>East Coast drafts range from <b>8.0 m at Haldia</b> to <b>19.5 m at Gangavaram</b>. The wrong vessel size means part-cargoes, lighterage, idle berths and demurrage, and the draft also changes with the monsoon.</p></article>
+      <article class="step" data-step="3"><span class="num mono">D</span><h3>Too many single spot fixtures</h3><p>On the pilot lane the daily-spot baseline needed <b id="fixTxt">268</b> separate spot fixtures in 5½ years. The Ministry's objective is to move to <b>short and medium-term multi-voyage contracts</b>.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ===== WHY IT MATTERS ===== -->
+<section id="why" class="why">
+  <div class="section-head" data-reveal><span class="kicker">02 · Why it matters</span><h2 data-split>Freight is a steel-making cost. Treat it like one.</h2>
+    <p class="lede">SAIL imports millions of tonnes of coking coal each year. Every dollar per tonne of freight goes straight into the cost of hot metal. A rigorous, forecast-driven chartering strategy brings lower cost and more predictable supply.</p></div>
+  <div class="cards">
+    <div class="card tilt" data-reveal style="--i:0"><div class="ic ic-wave"><svg viewBox="0 0 64 40"><path d="M0 30 L8 22 L14 26 L22 10 L30 18 L38 6 L46 20 L54 14 L64 24" /></svg></div><h3>Volatile freight</h3><p>Probabilistic 1-26 week forecasts with calibrated P10-P90 bands, instead of a single guess.</p><span class="tag mono">±CVaR</span></div>
+    <div class="card tilt" data-reveal style="--i:1"><div class="ic ic-draft"><svg viewBox="0 0 64 40"><rect x="6" y="8" width="40" height="10" rx="2"/><line x1="0" y1="18" x2="64" y2="18" class="wl"/><line x1="0" y1="34" x2="64" y2="34" class="bed"/></svg></div><h3>Draft &amp; berth limits</h3><p>Checks draft, LOA, beam, berth DWT, stockyard space, monsoon deltas and chokepoints such as Torres and Suez, and returns the real parcel size.</p><span class="tag mono">8.0 - 19.5 m</span></div>
+    <div class="card tilt" data-reveal style="--i:2"><div class="ic ic-idle"><svg viewBox="0 0 64 40"><circle cx="32" cy="20" r="14"/><path d="M32 10 V20 L40 24"/></svg></div><h3>Idle time &amp; deadheading</h3><p>Finds triangulation backhauls, short relets, just-in-time slow-steaming and laycan spacing, so fewer ships wait in ballast or at anchor.</p><span class="tag mono">ballast ↓</span></div>
+    <div class="card tilt" data-reveal style="--i:3"><div class="ic ic-alert"><svg viewBox="0 0 64 40"><path d="M32 4 L60 36 H4 Z"/><line x1="32" y1="16" x2="32" y2="26"/><circle cx="32" cy="31" r="1.5"/></svg></div><h3>Congestion &amp; disruption</h3><p>Early warnings for volatility spikes, turning points, port queues, cyclones and Red Sea diversions, each linked to the SAIL lanes it affects.</p><span class="tag mono">early warning</span></div>
+  </div>
+</section>
+
+<!-- ===== WILL IT FIT? ===== -->
+<section id="fit" class="fit">
+  <div class="section-head" data-reveal><span class="kicker">03 · Port-vessel feasibility, live</span><h2 data-split>Will it fit? Pick a port and watch the ships settle.</h2>
+    <p class="lede">Uses the same physics as the engine: cargo at draft = DWT − TPC × 100 × (design draft − allowed draft) − constants. A green ship loads full, an amber ship is part-laden to the port draft, and a red ship cannot call.</p></div>
+  <div class="fit-ctrl" data-reveal><div class="chips" id="fitPorts"></div><label class="toggle"><input type="checkbox" id="fitMonsoon"><span></span> SW monsoon</label></div>
+  <div class="fit-stage glass" data-reveal id="fitStage"></div>
+  <div class="fit-read" id="fitRead"></div>
+</section>
+
+<!-- ===== HOW IT WORKS ===== -->
+<section id="how" class="how">
+  <div class="section-head" data-reveal><span class="kicker">04 · How it works</span><h2 data-split>From market noise to a charter decision in six steps.</h2></div>
+  <div class="pipe" id="pipe">
+    <svg class="pipe-line" viewBox="0 0 1200 40" preserveAspectRatio="none"><path id="pipePath" d="M20 20 H1180"/><path id="pipeGlow" d="M20 20 H1180"/></svg>
+    <div class="node" data-n="0"><div class="nb">⌁</div><h4>Data</h4><p>Class TCE indices, bunker, coal, PMI, AIS ballasters, port queues, IMD and news events</p></div>
+    <div class="node" data-n="1"><div class="nb">∿</div><h4>Forecast</h4><p>GBM-quantile, structural and random-walk ensemble, calibrated with online conformal bands</p></div>
+    <div class="node" data-n="2"><div class="nb">⋰</div><h4>Scenarios</h4><p>Copula paths across weeks and classes, plus bunker, congestion and volume scenarios</p></div>
+    <div class="node" data-n="3"><div class="nb">⚓</div><h4>Feasibility</h4><p>Draft, LOA, beam, stockyard, chokepoints and monsoon checks feed a physics freight translator for any lane</p></div>
+    <div class="node" data-n="4"><div class="nb">▤</div><h4>Charter Ladder</h4><p>A two-stage stochastic LP (E + λ·CVaR) splits volume across COA, time charter and spot, and sets the timing</p></div>
+    <div class="node" data-n="5"><div class="nb">◉</div><h4>Cockpit</h4><p>Recommendation, what-if analysis, broker-quote X-ray and alerts, with every decision logged for audit</p></div>
+  </div>
+</section>
+
+<!-- ===== RESULTS ===== -->
+<section id="results" class="results">
+  <div class="section-head" data-reveal><span class="kicker">05 · Proof, not promises</span><h2 data-split>Walk-forward backtest against today's practice.</h2>
+    <p class="lede">Hay Point → Paradip, 900 kt per quarter, test period 2021-2026. The model is re-fitted every quarter using only information available at the time. We also run a placebo in an unpredictable market, where the model shows no false edge. <span class="syn">Synthetic market data: this demonstrates the method, not SAIL's actual savings.</span></p></div>
+  <div class="stats">
+    <div class="stat" data-reveal style="--i:0"><b class="mono"><span data-count="saving_pct" data-dec="1">0</span>%</b><span>lower freight cost vs daily spot</span><small class="mono" id="ciTxt"></small></div>
+    <div class="stat" data-reveal style="--i:1"><b class="mono">$<span data-count="saving_musd" data-dec="1">0</span>M</b><span>saved over 22 quarters</span></div>
+    <div class="stat" data-reveal style="--i:2"><b class="mono"><span data-count="spot_fixtures_before">0</span>→<span data-count="spot_fixtures_after">0</span></b><span>spot fixtures (moving to multi-voyage)</span></div>
+    <div class="stat" data-reveal style="--i:3"><b class="mono"><span data-count="contracted_pct">0</span>%</b><span>volume under COA / time charter</span></div>
+  </div>
+  <div class="wf glass" data-reveal><div class="wf-title mono small">AVERAGE LANDED FREIGHT · $/t</div><div class="wf-bars" id="wfBars"></div></div>
+</section>
+
+<!-- ===== MODULES / ENDPOINTS ===== -->
+<section id="modules" class="modules">
+  <div class="section-head" data-reveal><span class="kicker">06 · Enter the system</span><h2 data-split>Choose a module. Every card is a live endpoint.</h2>
+    <p class="lede">The status light on each card shows a real request to the API and its latency, measured when this page loaded.</p></div>
+  <div class="mod-grid" id="modGrid"></div>
+  <div class="enter" data-reveal><a href="/app" class="btn primary big">Open the FreightSaarthi cockpit <span class="arr">→</span></a><span class="mono small mut" id="enterHint">press <kbd>Enter</kbd> to set sail</span></div>
+</section>
+
+<footer class="foot">
+  <div class="waves"><svg viewBox="0 0 1440 80" preserveAspectRatio="none"><path class="fw1" d="M0 40 Q180 10 360 40 T720 40 T1080 40 T1440 40 T1800 40 T2160 40 T2520 40 T2880 40 V80 H0Z"/><path class="fw2" d="M0 50 Q180 25 360 50 T720 50 T1080 50 T1440 50 T1800 50 T2160 50 T2520 50 T2880 50 V80 H0Z"/></svg></div>
+  <div class="foot-in"><span>FreightSaarthi · SIH 2026 · PS 26006 · Ministry of Steel / SAIL</span><span class="mut">Market data is synthetic and labelled; port limits are assumptions tagged with verification sources.</span><span><a href="/docs">API docs</a> · <a href="/api">/api</a> · <a href="/app">Cockpit</a></span></div>
+</footer>
+
+<script src="/static/shared/seamap.js"></script>
+<script src="/static/shared/fitscene.js"></script>
+<script src="/static/js/landing.js"></script>
+</body>
+</html>
