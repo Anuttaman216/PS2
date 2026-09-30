@@ -7,6 +7,10 @@ Pages:   /            animated landing page
          /app         decision cockpit (single-page app)
          /docs        interactive OpenAPI (Swagger) docs
 API:     /api         catalogue of every endpoint
+Modules: this file   - pages, health, market/forecast, plan, feasibility, idle, risk, backtest, network, pipeline
+         ops.py      - programmes CRUD, decision ledger + charter notes + CSV, event ingestion, compare, data upload
+         store.py    - SQLite persistence (outputs/freightsaarthi.db)
+         planner.py  - server-side charter planner (physics + scenario paths + CVaR LP)
 """
 import json
 import threading
@@ -14,13 +18,16 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from saarthi.config import CLASSES, OUT, VESSELS, DISCHARGE, LOAD, ROUTES, CHOKEPOINTS, COMMERCIAL
+from saarthi import data as DATA, events as EV
 from .planner import Planner
+from . import store
 
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "static"
@@ -30,9 +37,11 @@ app = FastAPI(title="FreightSaarthi API", version="1.0",
                           "India's East Coast (SIH 2026 - PS 26006, Ministry of Steel / SAIL). "
                           "Market data in this build is SYNTHETIC; port limits are flagged assumptions.")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+store.init()
 
 STATE = {"R": None, "planner": None, "loaded_at": None,
-         "pipeline": {"status": "idle", "started": None, "finished": None, "error": None}}
+         "pipeline": {"status": "idle", "started": None, "finished": None, "error": None, "stage": None, "source": None, "log": []}}
 LOCK = threading.Lock()
 
 
@@ -166,11 +175,15 @@ class PlanRequest(BaseModel):
 
 
 @app.post("/api/plan", tags=["decisions"], summary="Recommend vessel, parcel, contract mix, ladder & timing for a cargo programme")
-def plan(req: PlanRequest):
-    _, P = need()
+def plan(req: PlanRequest, save: bool = Query(False, description="store the recommendation in the decision ledger")):
+    R, P = need()
     if req.load not in LOAD or req.disch not in DISCHARGE:
         raise HTTPException(400, "unknown port code - see /api/meta")
-    return JSONResponse(P.plan(req.model_dump()))
+    body = req.model_dump()
+    out = P.plan(body)
+    if save and out.get("ok"):
+        out["ledger_id"] = store.add_ledger(body, out, R["meta"])
+    return JSONResponse(out)
 
 
 class QuoteRequest(BaseModel):
@@ -216,7 +229,8 @@ def risk():
         now = P.m["tce_now"][c]
         spikes.append({"cls": c, "now": now, "p_up20": float((col > 1.2 * now).mean()), "p_dn20": float((col < 0.8 * now).mean()),
                        "median_4w": float(sorted(col)[len(col) // 2])})
-    return {"alerts": R["alerts"], "events": R["events"], "congestion": R["congestion"], "spikes": spikes}
+    live = [{**e["extracted"], "id": e["id"], "live": True} for e in store.list_events()]
+    return {"alerts": R["alerts"], "events": live + R["events"], "congestion": R["congestion"], "spikes": spikes}
 
 
 @app.get("/api/backtest", tags=["evidence"], summary="Rolling backtest: strategies, savings, ablations, placebo, tuning")
@@ -233,26 +247,42 @@ def network():
 
 
 # ------------------------------------------------------------------ pipeline
-def _run(fast):
+def _progress(msg):
+    st = STATE["pipeline"]
+    st["stage"] = msg
+    st["log"] = (st["log"] + [time.strftime("%H:%M:%S ") + msg])[-40:]
+
+
+def _run(fast, source):
     try:
         import run_pipeline
-        run_pipeline.main(fast)
+        run_pipeline.PROGRESS = _progress
+        run_pipeline.main(fast, source)
         load()
         STATE["pipeline"].update(status="done", finished=time.strftime("%H:%M:%S"), error=None)
     except Exception as e:  # noqa
         STATE["pipeline"].update(status="error", finished=time.strftime("%H:%M:%S"), error=repr(e))
 
 
-@app.post("/api/pipeline/run", tags=["system"], summary="Re-run the forecasting + backtest pipeline in the background")
-def pipeline_run(fast: bool = True):
+@app.post("/api/pipeline/run", tags=["system"], summary="Re-run forecasting + tuning + backtest in the background (synthetic or uploaded data)")
+def pipeline_run(fast: bool = True, source: str = Query("synthetic", pattern="^(synthetic|uploaded)$")):
+    if source == "uploaded" and not DATA.UPLOAD.exists():
+        raise HTTPException(400, "no uploaded data - POST a CSV to /api/data/upload first")
     with LOCK:
         if STATE["pipeline"]["status"] == "running":
             return {"status": "running"}
-        STATE["pipeline"].update(status="running", started=time.strftime("%H:%M:%S"), finished=None, error=None)
-    threading.Thread(target=_run, args=(fast,), daemon=True).start()
-    return {"status": "started"}
+        STATE["pipeline"].update(status="running", started=time.strftime("%H:%M:%S"), finished=None, error=None,
+                                 stage="starting", source=source, log=[])
+    threading.Thread(target=_run, args=(fast, source), daemon=True).start()
+    return {"status": "started", "source": source}
 
 
 @app.get("/api/pipeline/status", tags=["system"], summary="Pipeline run status")
 def pipeline_status():
     return STATE["pipeline"]
+
+
+# ------------------------------------------------------------------ operations / data / events routers
+from .ops import router as ops_router  # noqa: E402  (after STATE/need are defined)
+
+app.include_router(ops_router)

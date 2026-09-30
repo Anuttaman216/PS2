@@ -2,7 +2,16 @@
  "meta": {
   "asof": "2026-09-25",
   "data_label": "SYNTHETIC (structured world, seed 11) - demo only",
-  "runtime_s": 0.7,
+  "source": "synthetic",
+  "test_window": [
+   "2021-01-01",
+   "2026-06-30"
+  ],
+  "val_window": [
+   "2018-07-01",
+   "2020-12-31"
+  ],
+  "runtime_s": 1.0,
   "selected_params": {
    "lam": 0.0,
    "delta": 0.03,

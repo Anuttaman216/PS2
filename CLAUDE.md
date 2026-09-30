@@ -14,7 +14,7 @@ SAIL imports coking coal from Australia, the US, Mozambique, Russia and Indonesi
 5. raising early warnings (volatility, spike/crash odds, congestion, news events → impacted lanes);
 6. proving value with an honest **walk-forward backtest** against today's daily-spot practice, including a placebo test.
 
-**Status:** working end to end. The pilot lane is Hay Point (AU) → Paradip; every other origin × port works through the same code.
+**Status:** a working full-stack prototype. FastAPI backend with **35 REST endpoints**, SQLite persistence (programmes, decision ledger, events), real-data CSV upload with retraining, and an automated API test suite (`python tests/test_api.py`, 11/11 passing). Frontend: animated landing page plus a 12-page cockpit. The pilot lane is Hay Point (AU) → Paradip; every other origin × port works through the same code. The SIH demo script and judge Q&A are in [docs/DEMO.md](docs/DEMO.md).
 **Data:** all market data is **SYNTHETIC** (Baltic indices etc. are licensed), and port/vessel limits are **assumptions** tagged with a `confidence` and a `verify_with` source. Never present the backtest numbers as SAIL's real savings.
 
 The long-form design (candidate approaches, architecture, models, optimiser math, data sources, backtest protocol, phased plan, assumptions and limitations) is in **[docs/DESIGN.md](docs/DESIGN.md)**. Read it before making modelling changes.
@@ -25,6 +25,8 @@ The long-form design (candidate approaches, architecture, models, optimiser math
 pip install -r requirements.txt          # numpy pandas scipy scikit-learn lightgbm plotly fastapi uvicorn
 python run_pipeline.py                   # rebuilds outputs/results.json (~15 min cold; cached afterwards). Optional: results.json is committed.
 python serve.py                          # web app on http://localhost:8000  (PORT env var overrides)
+python tests/test_api.py                 # end-to-end API tests (temp DB + temp data dir; pytest optional)
+python run_pipeline.py --source uploaded # retrain on data/uploaded_market.csv (normally triggered from the Data Hub)
 ```
 * `/` animated landing page · `/app` cockpit SPA · `/api` endpoint catalogue · `/docs` Swagger.
 * `python run_pipeline.py --fast` does coarser refits and a smaller tuning grid.
@@ -52,6 +54,8 @@ saarthi/              core models (pure Python)
   alerts.py           market + congestion alerts, congestion_outlook (climatology + AR anomaly)
   events.py           news -> typed events (rule extractor; optional Claude structured extraction, model claude-opus-5-5) -> impacted lanes
   idle.py             idle/ballast options (triangulation, relet, JIT slow-steam) + laycan spacing
+  data.py             real-data ingestion: validate uploaded weekly CSV (date + tce_<Class> required, drivers optional),
+                      proxy-fill missing columns from the synthetic world (reported), estimate market meta, template_csv(), windows() split
 run_pipeline.py       end-to-end: worlds -> walk-forward forecasts -> accuracy report (DM test) -> decision-focused tuning (validation)
                       -> test backtest -> ablations (RW forecasts, placebo) -> today's recommendation -> outputs/results.json (+ dashboard.html)
 build_dashboard.py    older single-file offline dashboard (outputs/dashboard.html, plotly inlined)
@@ -59,12 +63,16 @@ serve.py              uvicorn launcher (PORT env)
 webapp/
   server.py           FastAPI: pages (/, /app), /vendor/plotly.min.js (served from the python plotly package = offline), REST API
   planner.py          Planner: server-side plan for ANY lane using results.json scenario paths + physics + the real LP
+  ops.py              APIRouter: programmes CRUD + plan, decision ledger (+ HTML charter note, CSV export), event ingestion, compare, data upload
+  store.py            SQLite (outputs/freightsaarthi.db; env FREIGHTSAARTHI_DB overrides; auto-created + seeded with 4 demo programmes)
+tests/test_api.py     end-to-end tests for every endpoint (sets FREIGHTSAARTHI_DB / FREIGHTSAARTHI_DATA to temp paths)
   static/index.html   landing page;  static/app.html  cockpit shell
   static/css/         base.css (design tokens), landing.css (+ landing-fix.css), app.css
   static/js/          landing.js (preloader, split text, typewriter, scrollytelling, fit scene, counters, endpoint pings), app.js (SPA)
   static/shared/      seamap.js (window.SeaMap: dot-matrix Indian Ocean canvas map, lanes, animated ships, ports, chokepoints),
                       fitscene.js (window.FitScene: SVG ship-vs-port draft simulator)
-docs/DESIGN.md        full design & results;  docs/PROBLEM_STATEMENT.md  original PS + task brief
+docs/DESIGN.md        full design & results;  docs/PROBLEM_STATEMENT.md  original PS + task brief;  docs/DEMO.md  SIH demo script + judge Q&A
+data/                 (gitignored) uploaded_market.csv from POST /api/data/upload; env FREIGHTSAARTHI_DATA overrides
 outputs/              results.json (committed, the app needs it), backtest_blocks.csv, forecast_accuracy.csv, dashboard.html
                       cache/ (pickles, gitignored; delete when model/backtest code changes)
 ```
@@ -77,6 +85,9 @@ synth.generate() --df weekly 2014-2026--> forecast.walk_forward() --fc (t,cls,h,
    run_pipeline.todays_recommendation() --paths (300x52x4)--> outputs/results.json --> webapp/server.py load()
                                                                                         -> Planner(R) for /api/plan etc.
 ```
+* `results.json` always holds the **active dataset** (synthetic or uploaded; see `meta.source` / `meta.data_label`). `POST /api/pipeline/run?source=uploaded` retrains on the upload. `source=synthetic&fast=false` restores the canonical demo from cache in about 1 s (fast=true for synthetic would recompute a different, uncached configuration).
+* Pipeline caches are keyed per dataset: synthetic uses plain names (`fc_13.pkl` ...), uploads use `up_<sha1>_...`. The placebo world is always synthetic.
+* Operational state (programmes, ledger, events) lives in SQLite and is independent of results.json. Ledger rows snapshot the data version they were computed on.
 * The **server only reads `outputs/results.json`** at startup (and after `POST /api/pipeline/run`). Python changes need a server restart; static files are served live.
 * `results.json` top-level keys: `meta` (asof, data_label, selected_params, tune_log), `vessels`, `discharge`, `load`, `routes`, `chokepoints`, `commercial`, `market` (mu, phi, beta, season[53], woy_now, bunker_now, tce_now), `paths` (150 scenario paths × 52 weeks per class, ints), `congestion` (52-week outlook per port), `fan`, `explain`, `forecast_report`, `forecast_report_placebo`, `backtest` (summary, summary_rw_ablation, summary_placebo, blocks), `recommendation`, `alerts`, `events`, `generalisation`.
 
@@ -106,19 +117,24 @@ synth.generate() --df weekly 2014-2026--> forecast.walk_forward() --fc (t,cls,h,
 * Forecast skill vs random walk is +3 to +13% at 1-12 weeks, and 80% coverage is 79-85%.
 * Validation tuning selected λ=0, δ=0.03, step 0.35.
 
-## 7. API (FastAPI, `webapp/server.py`)
+## 7. API (35 endpoints; `webapp/server.py` + `webapp/ops.py`)
 
-`GET /api` catalogue · `/api/health` · `/api/summary` · `/api/ticker` · `/api/meta` · `/api/forecast` · `/api/forecast/{cls}` ·
-`POST /api/plan` (body: load, disch, volume, duration 4-48, lead 2-12, stem, risk_lambda, freight_shock, bunker_change, congestion_add, monsoon, avoid_suez, broker_quote) ·
-`POST /api/quote-xray` · `GET /api/feasibility?load&disch&monsoon&stem&avoid_suez` · `/api/idle?cls&load&disch&idle_days` · `/api/risk` · `/api/backtest` · `/api/network` ·
-`POST /api/pipeline/run?fast=true` (background thread) · `GET /api/pipeline/status`. Port codes are the keys in `config/ports.json`.
+* **System:** `GET /api` (catalogue) · `/api/health` · `/api/summary` · `POST /api/pipeline/run?source=synthetic|uploaded&fast=bool` (background thread, stage log) · `GET /api/pipeline/status`
+* **Market:** `GET /api/ticker` · `/api/meta` · `/api/forecast` · `/api/forecast/{cls}`
+* **Decisions:** `POST /api/plan[?save=true]` (body: load, disch, volume, duration 4-48, lead 2-12, stem, risk_lambda, freight_shock, bunker_change, congestion_add, monsoon, avoid_suez, broker_quote) · `POST /api/compare` ({lanes:[{load,disch,volume?}], volume, duration, lead, risk_lambda, monsoon, avoid_suez}) · `POST /api/quote-xray` · `GET /api/feasibility?load&disch&monsoon&stem&avoid_suez` · `GET /api/idle?cls&load&disch&idle_days`
+* **Operations:** `GET/POST /api/programmes` · `GET/PUT/DELETE /api/programmes/{id}` · `POST /api/programmes/{id}/plan` (→ ledger, status open→planned) · `GET /api/ledger` · `GET /api/ledger/{id}` · `POST /api/ledger/{id}/decision` ({decision: accepted|rejected|modified|pending, note, decided_by, actual_rate}; accepted → programme contracted) · `GET /api/ledger/{id}/note` (printable HTML) · `GET /api/ledger/export.csv`
+* **Risk:** `GET /api/risk` (ingested events first, flagged `live`) · `POST /api/events/ingest` ({text, date?, source?, use_llm?}) · `GET /api/events` · `DELETE /api/events/{id}`
+* **Evidence:** `GET /api/backtest` · `GET /api/network`
+* **Data:** `GET /api/data/template` (CSV) · `POST /api/data/upload` (raw text/csv body or JSON {csv}; 422 with a readable reason on invalid data) · `GET /api/data/status` · `DELETE /api/data/upload`
+
+Port codes are the keys in `config/ports.json`. Validation errors return 400 (unknown port) or 422 (schema).
 
 ## 8. Frontend conventions
 
 * Vanilla JS in IIFEs, no framework and no build. Shared engines expose globals `SeaMap`, `GEO`, `FitScene`, `FIT`.
 * Theme: dark nautical. Tokens are in `css/base.css` (`--cyan #38bdf8`, `--teal #2dd4bf`, `--amber #fbbf24`, `--coral #fb7185`; fonts Space Grotesk / Inter / JetBrains Mono via Google Fonts with system fallbacks). Class colours: Capesize cyan, Panamax teal, Supramax amber, Handysize violet.
 * Landing sections: hero (SeaMap + ticker) → `#challenge` sticky scrollytelling (canvas, 4 steps) → `#why` tilt cards → `#fit` FitScene → `#how` pipeline (scroll-drawn line) → `#results` counters + waterfall → `#modules` live endpoint cards. Elements with `[data-reveal]` animate via IntersectionObserver, and `[data-split]` headings are split into animated words.
-* The cockpit SPA uses hash routes `#/`, `#/plan`, `#/forecast`, `#/feasibility`, `#/risk`, `#/idle`, `#/backtest`, `#/network`, `#/api`. Each page is an async function in `app.js` that renders into `#view`. `PL()` wraps Plotly with the theme, and `N()` / `countUp()` animate numbers. Pages must register teardown in `cleanup` (e.g. `SeaMap.destroy()`).
+* The cockpit SPA uses hash routes `#/`, `#/plan`, `#/compare`, `#/forecast`, `#/feasibility`, `#/risk`, `#/idle`, `#/ops`, `#/data`, `#/backtest`, `#/network`, `#/api`. Each page is an async function in `app.js` that renders into `#view`. `PL()` wraps Plotly with the theme, and `N()` / `countUp()` animate numbers. Pages must register teardown in `cleanup` (e.g. `SeaMap.destroy()`).
 * SeaMap coastlines are deliberately coarse polygons. Lanes are hand-routed waypoints (Torres, Bass Strait, Mozambique Channel, Malacca, Luzon, Red Sea/Suez, Cape alternative).
 * `prefers-reduced-motion` is respected.
 
@@ -133,6 +149,11 @@ synth.generate() --df weekly 2014-2026--> forecast.walk_forward() --fc (t,cls,h,
 * `build_dashboard.py` inlines plotly.js (~5 MB) so `outputs/dashboard.html` works fully offline. The web app instead serves plotly from the installed python package at `/vendor/plotly.min.js`.
 * The browser-preview tooling was flaky with smooth scrolling (`scroll-behavior:smooth`). Use `scrollTo({behavior:'instant'})` when testing programmatically.
 * A port can be in use (default 8000); `serve.py` honours `PORT`.
+* SeaMap port pulse phase must stay in [0,1) even for off-canvas ports (negative x). A negative `%` result gave a negative arc radius and froze the canvas loop.
+* HTML number inputs: `step` is anchored at `min`, so a value off the grid silently blocks form submission. Use `step="any"` for free numbers.
+* `<dialog>` `close` events are deferred while the page is hidden. Wire dialog actions to button clicks, not to the `close` event.
+* In `run_pipeline.tune()` the local list is `tlog` because `log()` is the progress function.
+* The Bash tool breaks on heredocs with unbalanced quotes. Write patch scripts to files (e.g. `scratch/`) and run them.
 
 ## 10. Guardrails when extending
 

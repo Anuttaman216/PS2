@@ -21,15 +21,20 @@
     bt: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     net: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     api: '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>',
+    ops: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v3h6V3M8 11h8M8 15h5"/>',
+    data: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    cmp: '<path d="M4 20V9M10 20V4M16 20v-8M22 20H2"/><path d="M3 7l6-4 6 5 6-4"/>',
   };
   const ROUTES = [
     ["", "Overview", "home", overview, "Today's position at a glance"], ["plan", "Plan a Charter", "plan", plan, "POST /api/plan"],
+    ["compare", "Compare Lanes", "cmp", compareP, "POST /api/compare"],
     ["forecast", "Market Forecast", "fc", forecast, "GET /api/forecast/{cls}"], ["feasibility", "Port Feasibility", "feas", feasibility, "GET /api/feasibility"],
-    ["risk", "Risk & Alerts", "risk", risk, "GET /api/risk"], ["idle", "Idle Manager", "idle", idleP, "GET /api/idle"],
+    ["risk", "Risk & Alerts", "risk", risk, "GET /api/risk · POST /api/events/ingest"], ["idle", "Idle Manager", "idle", idleP, "GET /api/idle"],
+    ["ops", "Programmes & Ledger", "ops", ops, "/api/programmes · /api/ledger"], ["data", "Data Hub", "data", dataHub, "/api/data/* · /api/pipeline/run"],
     ["backtest", "Backtest Proof", "bt", backtest, "GET /api/backtest"], ["network", "Network View", "net", network, "GET /api/network"],
     ["api", "API Explorer", "api", apiP, "GET /api"],
   ];
-  $("#nav").innerHTML = ROUTES.map(([k, n, ic], i) => (i === 1 ? '<div class="sep">Decide</div>' : i === 6 ? '<div class="sep">Evidence</div>' : "") +
+  $("#nav").innerHTML = ROUTES.map(([k, n, ic], i) => (i === 1 ? '<div class="sep">Decide</div>' : i === 7 ? '<div class="sep">Operate</div>' : i === 9 ? '<div class="sep">Evidence</div>' : "") +
     `<a href="#/${k}" data-k="${k}"><svg viewBox="0 0 24 24">${ICON[ic]}</svg>${n}</a>`).join("");
   $("#burger").onclick = () => $("#side").classList.toggle("open");
 
@@ -76,13 +81,16 @@
   async function header() {
     try {
       const h = await api("/api/health");
+      const upl = (h.data_label || "").startsWith("UPLOADED");
+      $("#srcChip").textContent = upl ? "UPLOADED DATA" : "SYNTHETIC DATA"; $("#srcChip").style.color = upl ? "#34d399" : "#fcd34d"; $("#srcChip").title = h.data_label || "";
       $("#asofChip").innerHTML = h.data_loaded ? `<span class="dot"></span>API live · data as of <b class="mono">${h.asof}</b>` : `<span class="dot bad"></span>no results - run pipeline`;
       const t = await api("/api/ticker"); const one = t.map(x => `<span>${x.label}<b>${x.value}</b>${x.change == null ? "" : `<i class="${x.change >= 0 ? "up" : "down"}">${x.change >= 0 ? "▲" : "▼"}${Math.abs(x.change)}${x.note.includes("days") ? "d" : "%"}</i> <small class="mut">${x.note}</small>`}</span>`).join("");
       $("#tape").innerHTML = one + one;
     } catch (e) { $("#asofChip").innerHTML = `<span class="dot bad"></span>API offline`; }
   }
   $("#runBtn").onclick = async () => {
-    const r = await post("/api/pipeline/run?fast=true", {}); toast(`Pipeline ${r.status}. This takes seconds with the cache, or minutes from scratch.`);
+    const src = (await api("/api/data/status")).active_source || "synthetic";
+    const r = await post(`/api/pipeline/run?fast=${src === "uploaded"}&source=${src}`, {}); toast(`Pipeline ${r.status}. This takes seconds with the cache, or minutes from scratch.`);
     $("#runBtn").disabled = true; $("#runBtn").textContent = "⟳ running…";
     const poll = setInterval(async () => {
       const s = await api("/api/pipeline/status");
@@ -175,7 +183,7 @@
     if (!P.ok) { out.innerHTML = `<div class="card"><h3>No feasible vessel</h3><p class="no">${P.message}</p><div class="tw">${P.classes.map(c => `<div>${c.cls}: ${c.binding}</div>`).join("")}</div></div>`; return; }
     const M = cache["/api/meta"];
     out.innerHTML = `<div class="loading-veil"><div class="spinner"></div></div>
-     <div class="card"><h3><span class="h-l"><i></i>Recommendation</span><span class="pill ok">LP ${P.lp.status}</span></h3>
+     <div class="card"><h3><span class="h-l"><i></i>Recommendation</span><span class="row" style="gap:8px"><span class="pill ok">LP ${P.lp.status}</span><button class="btn primary xs" id="saveLed">Save to ledger</button></span></h3>
       <div class="rec">Charter <b>${P.voyages} × ${P.best_class}</b> voyages of <b>${fmt(P.parcel_t)} t</b> from <b>${M.load[rq.load].name}</b> to <b>${M.discharge[rq.disch].name}</b>.
       COA fixed at <b>$${fmt(P.coa_quote, 2)}/t</b>, period TC hire ≈ <b>$${fmt(P.tc_hire)}/day</b>.<br><span class="act">${P.action}</span></div>
       <div class="mixbar" id="pMix"></div>
@@ -193,6 +201,7 @@
       <div class="card"><h3><span class="h-l"><i></i>Turnaround &amp; utilisation</span></h3>${utilTable(P.utilisation)}
       ${(P.alerts.length || P.events.length) ? `<h3 style="margin-top:14px"><span class="h-l"><i></i>Lane warnings</span></h3>${P.alerts.map(alertHTML).join("")}${P.events.slice(0, 3).map(e => `<div class="alert ${e.severity >= 3 ? "high" : ""}"><span class="k">${e.event_type}</span>${e.summary}</div>`).join("")}` : ""}</div></div>`;
     mixBar($("#pMix"), P.mix);
+    $("#saveLed").onclick = async () => { const s2 = await post("/api/plan?save=true", rq); toast(`✓ Saved as ledger #${s2.ledger_id} · <a href="/api/ledger/${s2.ledger_id}/note" target="_blank" style="color:#2dd4bf">open charter note ↗</a> · <a href="#/ops" style="color:#2dd4bf">ledger</a>`, 7000); };
     const T = P.tranches, maxW = Math.max(8, ...T.map(t => t.week + 2));
     $("#pLad").innerHTML = `<div class="track"></div>` + (T.length ? T.map((t, i) => `<div class="tr" style="left:${6 + t.week / maxW * 86}%;animation-delay:${i * .15}s">wk +${t.week}<i></i><b>${pct(t.share)}</b></div>`).join("") : `<div class="tr" style="left:50%">no lock-in this week<i style="background:#475569;box-shadow:none"></i>stay spot</div>`);
     gauge($("#pX"), P.xray);
@@ -291,13 +300,31 @@
 
   /* ---------- RISK ---------- */
   async function risk(v) {
-    const d = await get("/api/risk");
-    v.innerHTML = `<div class="grid g2"><div class="card"><h3><span class="h-l"><i></i>Early warnings</span><span class="pill">${d.alerts.length} active</span></h3>${d.alerts.map(alertHTML).join("") || "<p class='mut'>No active alerts.</p>"}</div>
-      <div class="card"><h3><span class="h-l"><i></i>Event intelligence · news → typed event → impacted lanes</span></h3><div class="timeline">${d.events.map(e => `<div class="tl s${e.severity}"><span class="d">${e.date} · ${e.event_type.replace("_", " ")} · severity ${e.severity} · ~${e.expected_duration_days} d · freight ${e.freight_direction}</span><p>${e.summary}</p><span class="small mut">Impacted: ${(e.impacted_lanes || []).slice(0, 5).join(", ")}${(e.impacted_lanes || []).length > 5 ? ` +${e.impacted_lanes.length - 5} more` : ""}</span></div>`).join("")}</div></div></div>
+    const d = await api("/api/risk");
+    const SAMPLES = ["IMD: cyclonic storm likely to cross north Odisha coast; Paradip and Dhamra port operations may be suspended for 48 hours.",
+      "Dock workers strike at Haldia dock complex enters second day; cargo handling suspended.",
+      "Several bulk carriers divert via Cape of Good Hope after renewed attacks in the Red Sea near Bab-el-Mandeb.",
+      "Heavy rain in Bowen Basin disrupts coal rail to Hay Point; terminal queue rising."];
+    v.innerHTML = `<div class="card"><h3><span class="h-l"><i></i>Ingest a news item / port notice / IMD bulletin</span><span class="small mut">POST /api/events/ingest → typed event → impacted SAIL lanes (stored)</span></h3>
+      <div class="presets">${SAMPLES.map((t, i) => `<button data-s="${i}">${["Cyclone · Odisha", "Strike · Haldia", "Red Sea diversion", "QLD rail flood"][i]}</button>`).join("")}</div>
+      <div class="row" style="align-items:stretch"><textarea id="evText" rows="2" style="flex:1;min-width:260px;padding:10px;border-radius:10px;border:1px solid var(--line2);background:rgba(3,10,20,.6);color:var(--ink);font:14px var(--f-body)" placeholder="Paste a headline or port circular…"></textarea>
+      <button class="btn primary xs" id="evGo">Analyse &amp; store ▶</button></div><div id="evOut"></div></div>
+      <div class="grid g2"><div class="card"><h3><span class="h-l"><i></i>Early warnings</span><span class="pill">${d.alerts.length} active</span></h3>${d.alerts.map(alertHTML).join("") || "<p class='mut'>No active alerts.</p>"}</div>
+      <div class="card"><h3><span class="h-l"><i></i>Event intelligence · news → typed event → impacted lanes</span></h3><div class="timeline">${d.events.map(e => `<div class="tl s${e.severity}"><span class="d">${e.live ? `<span class="pill ok">LIVE #${e.id}</span> <a href="#" data-evdel="${e.id}" style="color:var(--coral)">delete</a> · ` : ""}${e.date} · ${e.event_type.replace("_", " ")} · severity ${e.severity} · ~${e.expected_duration_days} d · freight ${e.freight_direction}</span><p>${e.summary}</p><span class="small mut">Impacted: ${(e.impacted_lanes || []).slice(0, 5).join(", ")}${(e.impacted_lanes || []).length > 5 ? ` +${e.impacted_lanes.length - 5} more` : ""}</span></div>`).join("")}</div></div></div>
       <div class="card"><h3><span class="h-l"><i></i>Port congestion outlook · expected waiting days</span><div class="seg" id="pSeg"></div></h3><div id="rCong" class="plot"></div></div>
       <div class="grid g2"><div class="card"><h3><span class="h-l"><i></i>Spike vs crash odds · next 4 weeks</span></h3><div id="rSp" class="plot short"></div></div>
       <div class="card"><h3><span class="h-l"><i></i>Rate-move table</span></h3><table><thead><tr><th>Class</th><th>Now $/d</th><th>4w median</th><th>P(+20%)</th><th>P(-20%)</th></tr></thead><tbody>${d.spikes.map(s => `<tr><td>${s.cls}</td><td>${fmt(s.now)}</td><td>${fmt(s.median_4w)}</td><td class="${s.p_up20 > .2 ? "no" : ""}">${pct(s.p_up20)}</td><td class="${s.p_dn20 > .2 ? "warn" : ""}">${pct(s.p_dn20)}</td></tr>`).join("")}</tbody></table>
       <p class="small mut">Probabilities are computed from the calibrated scenario paths, not from point forecasts.</p></div></div>`;
+    $$("[data-s]").forEach(b => b.onclick = () => $("#evText").value = SAMPLES[+b.dataset.s]);
+    $("#evGo").onclick = async () => {
+      const t = $("#evText").value.trim(); if (t.length < 10) return toast("Enter at least a sentence");
+      try { const e = await post("/api/events/ingest", {text: t});
+        $("#evOut").innerHTML = `<div class="alert ${e.severity >= 3 ? "high" : ""}" style="margin-top:12px"><span class="k">${e.event_type.replace("_", " ")}</span>severity ${e.severity} · ~${e.expected_duration_days} d · freight ${e.freight_direction} · locations: <b>${e.locations.join(", ") || "-"}</b><br>
+          <span class="small">Impacted lanes (${e.impacted_lanes.length}): ${e.impacted_lanes.slice(0, 10).join(", ")}${e.impacted_lanes.length > 10 ? " …" : ""}</span></div>`;
+        toast(`✓ Event #${e.id} stored`); setTimeout(route, 2200);
+      } catch (err) { toast("✕ " + err.message); }
+    };
+    $$("[data-evdel]").forEach(a => a.onclick = async ev => { ev.preventDefault(); await api(`/api/events/${a.dataset.evdel}`, {method: "DELETE"}); route(); });
     const ports = Object.keys(d.congestion); let sel = new Set(["PARADIP", "DHAMRA", "HALDIA", "VIZAG"]);
     const drawC = () => PL("rCong", ports.filter(p => sel.has(p)).map(p => ({x: d.congestion[p].map(r => r.h), y: d.congestion[p].map(r => r.mean), name: p, line: {width: 2.2, shape: "spline"}})), {xaxis: {title: "weeks ahead"}, yaxis: {title: "days"}});
     $("#pSeg").innerHTML = ports.map(p => `<button data-p="${p}" class="${sel.has(p) ? "on" : ""}">${p.slice(0, 6)}</button>`).join("");
@@ -405,6 +432,154 @@
       $("#aOut").innerHTML = pretty.replace(/[&<>]/g, ch => ({"&": "&amp;", "<": "&lt;", ">": "&gt;"}[ch]))
         .replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\b|\b(true|false|null)\b/g, (m, s, colon, n, b2) => s ? (colon ? `<span class="k">${s}</span>${colon}` : `<span class="s">${s}</span>`) : n ? `<span class="n">${n}</span>` : `<span class="b">${b2}</span>`);
     });
+  }
+
+  /* ---------- OPERATIONS: programmes + decision ledger ---------- */
+  const STATUS_PILL = {open: "", planned: "part", contracted: "ok", closed: "", pending: "part", accepted: "ok", rejected: "no", modified: "part"};
+  let lastOpsPlan = null;
+  const opsPlanHTML = P => `<div class="callout teal" style="margin-top:14px"><b>Ledger #${P.ledger_id}</b>: ${P.voyages} × ${P.best_class} of ${fmt(P.parcel_t)} t · expected $${fmt(P.cost.mean, 2)}/t (P10-P90 ${fmt(P.cost.p10, 2)}-${fmt(P.cost.p90, 2)}) · ${P.action}
+    <div class="mixbar" id="opMix"></div><div class="row"><a class="btn primary xs" href="/api/ledger/${P.ledger_id}/note" target="_blank">Open charter note ↗</a><button class="btn ghost xs" data-dec="${P.ledger_id}">Record decision</button></div></div>`;
+  async function ops(v) {
+    const [M, progs, led] = await Promise.all([get("/api/meta"), api("/api/programmes"), api("/api/ledger?limit=100")]);
+    const st = led.stats, cnt = s => progs.filter(p => p.status === s).length;
+    const opt = (obj, sel) => Object.entries(obj).map(([k, p]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${p.name}</option>`).join("");
+    v.innerHTML = `<div class="kpis"><div class="kpi hl"><b>${N(progs.length)}</b><span>cargo programmes</span></div><div class="kpi"><b>${N(cnt("open"))}</b><span>open</span></div>
+      <div class="kpi"><b>${N(cnt("planned"))}</b><span>planned</span></div><div class="kpi"><b>${N(cnt("contracted"))}</b><span>contracted</span></div>
+      <div class="kpi"><b>${N(st.n || 0)}</b><span>recommendations logged</span></div><div class="kpi"><b>${N(st.acc || 0)} / ${N(st.pend || 0)}</b><span>accepted / pending</span></div></div>
+      <div class="card"><h3><span class="h-l"><i></i>Cargo programmes (SAIL requirements)</span><button class="btn primary xs" id="newProg">+ New programme</button></h3>
+      <form id="progForm" class="form" style="display:none;margin-bottom:14px"><input type="hidden" id="pg-id"><div class="grid g4">
+        <div><label>Name</label><input type="text" id="pg-name" required placeholder="Q1 coking coal - Bhilai"></div><div><label>Plant</label><input type="text" id="pg-plant" placeholder="Bhilai"></div>
+        <div><label>Origin</label><select id="pg-load">${opt(M.load, "HAY_POINT")}</select></div><div><label>Destination</label><select id="pg-disch">${opt(M.discharge, "PARADIP")}</select></div>
+        <div><label>Volume (t)</label><input type="number" id="pg-vol" value="900000" step="any" min="10000"></div><div><label>Duration (weeks)</label><input type="number" id="pg-dur" value="13" min="4" max="48"></div>
+        <div><label>First laycan (weeks)</label><input type="number" id="pg-lead" value="3" min="2" max="12"></div><div><label>Risk λ</label><input type="number" id="pg-lam" value="0.5" step="any" min="0" max="5"></div></div>
+        <div class="row" style="margin-top:6px"><label class="toggle"><input type="checkbox" id="pg-mon"><span></span>Monsoon</label><label class="toggle"><input type="checkbox" id="pg-suez"><span></span>Avoid Suez</label>
+        <div style="flex:1;min-width:220px"><label>Notes</label><input type="text" id="pg-notes"></div></div>
+        <div class="row" style="margin-top:12px"><button class="btn primary xs" type="submit" id="pg-save">Save programme</button><button class="btn ghost xs" type="button" id="pg-cancel">Cancel</button></div></form>
+      <div class="tw"><table><thead><tr><th>#</th><th class="l">Programme</th><th class="l">Lane</th><th>Volume t</th><th>Weeks</th><th>Status</th><th>Plans</th><th></th></tr></thead><tbody>
+      ${progs.map(p => `<tr><td>${p.id}</td><td class="l"><b>${p.name}</b><br><span class="small mut">${p.plant || ""} ${p.notes ? "· " + p.notes : ""}</span></td><td class="l">${M.load[p.load] ? M.load[p.load].name.split(" (")[0] : p.load} → ${M.discharge[p.disch] ? M.discharge[p.disch].name.split(" (")[0] : p.disch}</td>
+        <td>${fmt(p.volume)}</td><td>${p.duration}</td><td><span class="pill ${STATUS_PILL[p.status] || ""}">${p.status}</span></td><td>${p.n_plans}</td>
+        <td><div class="row" style="flex-wrap:nowrap;gap:6px"><button class="btn primary xs" data-plan="${p.id}">Plan ▶</button><button class="btn ghost xs" data-edit="${p.id}">Edit</button><button class="btn ghost xs" data-del="${p.id}">✕</button></div></td></tr>`).join("") || `<tr><td colspan="8" class="mut">No programmes yet.</td></tr>`}</tbody></table></div>
+      <div id="planOut">${lastOpsPlan ? opsPlanHTML(lastOpsPlan) : ""}</div></div>
+      <div class="card"><h3><span class="h-l"><i></i>Decision ledger · audit trail of every recommendation</span><a class="btn ghost xs" href="/api/ledger/export.csv">⭳ Export CSV</a></h3>
+      <div class="tw"><table><thead><tr><th>#</th><th>Time</th><th class="l">Lane</th><th>Class</th><th>COA/TC/Spot</th><th>Exp $/t</th><th>CVaR</th><th>Decision</th><th class="l">By · note</th><th></th></tr></thead><tbody>
+      ${led.rows.map(r => `<tr><td>${r.id}</td><td class="mono small">${r.created_at.slice(5, 16)}</td><td class="l">${r.load} → ${r.disch}<br><span class="small mut">${fmt(r.volume)} t · hash ${r.input_hash}</span></td><td>${r.best_class}</td>
+        <td class="mono">${pct(r.mix_coa)}/${pct(r.mix_tc)}/${pct(r.mix_spot)}</td><td class="mono">$${fmt(r.exp_cost, 2)}</td><td class="mono">$${fmt(r.cvar90, 2)}</td><td><span class="pill ${STATUS_PILL[r.decision]}">${r.decision}</span></td>
+        <td class="l small">${r.decided_by || ""}${r.decision_note ? " · " + r.decision_note : ""}${r.actual_rate ? ` · actual $${r.actual_rate}` : ""}</td>
+        <td><div class="row" style="flex-wrap:nowrap;gap:6px"><a class="btn ghost xs" href="/api/ledger/${r.id}/note" target="_blank">Note ↗</a><button class="btn ghost xs" data-dec="${r.id}">Decide</button></div></td></tr>`).join("") || `<tr><td colspan="10" class="mut">No recommendations logged yet. Plan a programme, or use "Save to ledger" on the planner.</td></tr>`}</tbody></table></div></div>
+      <dialog id="decDlg" class="card" style="color:var(--ink);max-width:420px;width:92%"><form method="dialog" class="form"><h3>Record decision · ledger #<span id="dl-id"></span></h3>
+        <label>Decision</label><select id="dl-dec"><option value="accepted">Accepted</option><option value="modified">Modified</option><option value="rejected">Rejected</option><option value="pending">Pending</option></select>
+        <label>Decided by</label><input type="text" id="dl-by" placeholder="e.g. GM (Shipping)"><label>Note</label><input type="text" id="dl-note" placeholder="e.g. COA tender floated">
+        <label>Actual fixed rate $/t (optional)</label><input type="number" id="dl-rate" step="0.01">
+        <div class="row" style="margin-top:14px"><button class="btn primary xs" type="button" id="dl-save">Save decision</button><button class="btn ghost xs" type="button" id="dl-cancel">Cancel</button></div></form></dialog>`;
+    const form = $("#progForm"), show = p => { form.style.display = "block"; $("#pg-id").value = p ? p.id : ""; $("#pg-name").value = p ? p.name : ""; $("#pg-plant").value = p ? (p.plant || "") : "";
+      $("#pg-load").value = p ? p.load : "HAY_POINT"; $("#pg-disch").value = p ? p.disch : "PARADIP"; $("#pg-vol").value = p ? p.volume : 900000; $("#pg-dur").value = p ? p.duration : 13;
+      $("#pg-lead").value = p ? p.lead : 3; $("#pg-lam").value = p ? p.risk_lambda : 0.5; $("#pg-mon").checked = p ? p.monsoon : false; $("#pg-suez").checked = p ? p.avoid_suez : false; $("#pg-notes").value = p ? (p.notes || "") : "";
+      $("#pg-save").textContent = p ? "Update programme" : "Save programme"; $("#pg-name").focus(); };
+    $("#newProg").onclick = () => show(null); $("#pg-cancel").onclick = () => form.style.display = "none";
+    form.onsubmit = async e => { e.preventDefault(); const id = $("#pg-id").value;
+      const body = {name: $("#pg-name").value, plant: $("#pg-plant").value || null, load: $("#pg-load").value, disch: $("#pg-disch").value, volume: +$("#pg-vol").value, duration: +$("#pg-dur").value,
+        lead: +$("#pg-lead").value, risk_lambda: +$("#pg-lam").value, monsoon: $("#pg-mon").checked, avoid_suez: $("#pg-suez").checked, notes: $("#pg-notes").value || null};
+      try { await api(id ? `/api/programmes/${id}` : "/api/programmes", {method: id ? "PUT" : "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); toast(id ? "✓ Programme updated" : "✓ Programme created"); route(); }
+      catch (err) { toast("✕ " + err.message); } };
+    $$("[data-edit]").forEach(b => b.onclick = () => show(progs.find(p => p.id === +b.dataset.edit)));
+    $$("[data-del]").forEach(b => b.onclick = async () => { if (!confirm("Delete this programme?")) return; await api(`/api/programmes/${b.dataset.del}`, {method: "DELETE"}); toast("Programme deleted"); route(); });
+    $$("[data-plan]").forEach(b => b.onclick = async () => {
+      b.disabled = true; b.textContent = "…";
+      try {
+        const P = await post(`/api/programmes/${b.dataset.plan}/plan`, {});
+        lastOpsPlan = P; toast(`✓ Planned & logged as ledger #${P.ledger_id}`); route(); return;
+      } catch (err) { toast("✕ " + err.message); }
+      b.disabled = false; b.textContent = "Plan ▶";
+    });
+    if (lastOpsPlan && $("#opMix")) mixBar($("#opMix"), lastOpsPlan.mix);
+    const dlg = $("#decDlg");
+    $$("[data-dec]").forEach(b => b.onclick = () => { $("#dl-id").textContent = b.dataset.dec; dlg.showModal(); });
+    $("#dl-cancel").onclick = () => dlg.close();
+    $("#dl-save").onclick = async () => {
+      dlg.close();
+      const body = {decision: $("#dl-dec").value, decided_by: $("#dl-by").value || null, note: $("#dl-note").value || null, actual_rate: +$("#dl-rate").value || null};
+      try { await post(`/api/ledger/${$("#dl-id").textContent}/decision`, body); toast("✓ Decision recorded"); route(); } catch (err) { toast("✕ " + err.message); }
+    };
+  }
+
+  /* ---------- DATA HUB: template -> upload -> retrain ---------- */
+  async function dataHub(v) {
+    const d = await api("/api/data/status"), up = d.uploaded;
+    const uploadedActive = d.active_source === "uploaded";
+    v.innerHTML = `<div class="card"><h3><span class="h-l"><i></i>Active data</span><span class="pill ${uploadedActive ? "ok" : "part"}">${uploadedActive ? "UPLOADED DATA" : "SYNTHETIC DEMO DATA"}</span></h3>
+      <p class="mono small">${d.active_label} · as of ${d.asof}</p><p class="small mut">Every page, the planner and the backtest read this dataset. Replace it with SAIL's real weekly history in three steps.</p></div>
+      <div class="grid g3"><div class="card"><h3><span class="h-l"><i></i>① Download template</span></h3><p class="small mut">Weekly rows. Required: <span class="mono">${d.required_columns.join(", ")}</span> ($/day TCE per class, e.g. Baltic 5TC/82/63/38 or broker assessments). Optional drivers (bunker, coal, PMI, ballaster counts, port waiting days) are proxy-filled when missing, and the fill is labelled. Minimum ${d.min_weeks} weeks.</p>
+        <a class="btn primary xs" href="/api/data/template">⭳ freightsaarthi_market_template.csv</a></div>
+      <div class="card"><h3><span class="h-l"><i></i>② Upload CSV</span></h3><label class="drop" id="drop" style="display:block;border:1.5px dashed var(--line2);border-radius:12px;padding:22px;text-align:center;cursor:pointer">
+        <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none"><b>Drop a CSV here</b><br><span class="small mut">or click to choose a file</span></label><div id="upRep" style="margin-top:12px">${up.uploaded ? repHTML(up) : ""}</div></div>
+      <div class="card"><h3><span class="h-l"><i></i>③ Retrain &amp; backtest</span></h3><p class="small mut">Re-runs walk-forward forecasting, decision-focused tuning, the backtest, ablations and the placebo on the chosen data. Uploaded data is split automatically into train, validation and test periods.</p>
+        <div class="row"><button class="btn primary xs" id="runUp" ${up.uploaded && !up.error ? "" : "disabled"}>▶ Run on uploaded data</button><button class="btn ghost xs" id="runSyn">↺ Restore synthetic demo</button>${up.uploaded ? `<button class="btn ghost xs" id="delUp">Remove upload</button>` : ""}</div>
+        <div id="pipeBox" style="margin-top:12px"></div></div></div>`;
+    const drop = $("#drop"), fileIn = $("#csvFile");
+    const send = async file => {
+      const text = await file.text(); $("#upRep").innerHTML = `<div class="skel" style="height:60px"></div>`;
+      const r = await fetch("/api/data/upload", {method: "POST", headers: {"Content-Type": "text/csv"}, body: text}); const j = await r.json();
+      if (!r.ok) { $("#upRep").innerHTML = `<div class="alert high"><span class="k">rejected</span>${j.detail}</div>`; return; }
+      toast("✓ CSV validated and stored"); route();
+    };
+    fileIn.onchange = () => fileIn.files[0] && send(fileIn.files[0]);
+    ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.style.borderColor = "var(--cyan)"; }));
+    drop.addEventListener("dragleave", () => drop.style.borderColor = "");
+    drop.addEventListener("drop", e => { e.preventDefault(); drop.style.borderColor = ""; if (e.dataTransfer.files[0]) send(e.dataTransfer.files[0]); });
+    if ($("#delUp")) $("#delUp").onclick = async () => { await api("/api/data/upload", {method: "DELETE"}); toast("Upload removed"); route(); };
+    const runPipe = async source => {
+      try { await post(`/api/pipeline/run?fast=${source === "uploaded"}&source=${source}`, {}); } catch (e) { toast("✕ " + e.message); return; }
+      $$("#runUp, #runSyn").forEach(b => b.disabled = true);
+      const poll = setInterval(async () => {
+        const s = await api("/api/pipeline/status");
+        if (!$("#pipeBox")) { clearInterval(poll); return; }
+        $("#pipeBox").innerHTML = `<div class="row"><span class="spinner" style="width:18px;height:18px;border-width:2px;${s.status === "running" ? "" : "display:none"}"></span><b>${s.status}</b> <span class="small mut">${s.source} · ${s.stage || ""}</span></div><pre class="json" style="max-height:180px;margin-top:8px">${(s.log || []).join("\n")}</pre>`;
+        if (s.status !== "running") { clearInterval(poll); Object.keys(cache).forEach(k => delete cache[k]); header(); toast(s.status === "done" ? "✓ Pipeline finished, every page now uses this data" : "✕ " + s.error, 7000); setTimeout(route, 1200); }
+      }, 1500);
+    };
+    $("#runUp").onclick = () => runPipe("uploaded"); $("#runSyn").onclick = () => runPipe("synthetic");
+  }
+  const repHTML = u => u.error ? `<div class="alert high"><span class="k">invalid</span>${u.error}</div>` :
+    `<table><tbody><tr><td>Rows</td><td>${u.rows} weeks</td></tr><tr><td>Range</td><td>${u.start} → ${u.end}</td></tr><tr><td>Provided optional</td><td class="l small">${u.provided_optional.join(", ") || "-"}</td></tr>
+     <tr><td>Proxy-filled</td><td class="l small warn">${u.filled_from_proxy.join(", ") || "none"}</td></tr>${u.warnings.length ? `<tr><td>Warnings</td><td class="l small warn">${u.warnings.join("; ")}</td></tr>` : ""}<tr><td>Fingerprint</td><td class="mono">${u.sha1}</td></tr></tbody></table>`;
+
+  /* ---------- COMPARE LANES ---------- */
+  async function compareP(v) {
+    const M = await get("/api/meta");
+    v.innerHTML = `<div class="card"><div class="row"><div class="seg" id="cmMode"><button data-m="dest" class="on">Many origins → one port</button><button data-m="orig">One origin → many ports</button></div>
+      <div style="min-width:230px" id="cmPick"></div><div style="width:150px"><label class="small mut">Volume (t)</label><input type="number" id="cm-vol" value="900000" step="any" min="10000"></div>
+      <div style="width:120px"><label class="small mut">Weeks</label><input type="number" id="cm-dur" value="13" min="4" max="48"></div><label class="toggle"><input type="checkbox" id="cm-suez"><span></span>Avoid Suez</label></div>
+      <div class="presets" id="cmChips" style="margin-top:12px"></div><button class="btn primary xs" id="cmRun" style="margin-top:6px">Compare ▶</button></div>
+      <div id="cmOut" class="grid"></div>`;
+    let mode = "dest";
+    const pickers = () => {
+      $("#cmPick").innerHTML = mode === "dest" ? `<label class="small mut">Destination</label><select id="cm-one">${Object.entries(M.discharge).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join("")}</select>`
+        : `<label class="small mut">Origin</label><select id="cm-one">${Object.entries(M.load).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join("")}</select>`;
+      const many = mode === "dest" ? M.load : M.discharge;
+      $("#cmChips").innerHTML = Object.entries(many).map(([k, p]) => `<button data-k="${k}" class="on" style="border-color:var(--teal);color:#fff">${p.name.split(" (")[0].replace(" anchorage", "")}</button>`).join("");
+      $$("#cmChips button").forEach(b => b.onclick = () => { b.classList.toggle("on"); b.style.borderColor = b.classList.contains("on") ? "var(--teal)" : ""; b.style.color = b.classList.contains("on") ? "#fff" : ""; });
+    };
+    $$("#cmMode button").forEach(b => b.onclick = () => { mode = b.dataset.m; $$("#cmMode button").forEach(x => x.classList.toggle("on", x === b)); pickers(); });
+    pickers();
+    $("#cmRun").onclick = async () => {
+      const one = $("#cm-one").value, sel = $$("#cmChips button.on").map(b => b.dataset.k);
+      if (!sel.length) return toast("Select at least one lane");
+      const lanes = sel.map(k => mode === "dest" ? {load: k, disch: one} : {load: one, disch: k});
+      $("#cmOut").innerHTML = `<div class="card"><div class="skel" style="height:200px"></div></div>`;
+      const r = await post("/api/compare", {lanes, volume: +$("#cm-vol").value, duration: +$("#cm-dur").value, avoid_suez: $("#cm-suez").checked});
+      const ok = r.rows.filter(x => x.ok), lbl = x => mode === "dest" ? M.load[x.load].name.split(" (")[0] : M.discharge[x.disch].name.split(" (")[0];
+      $("#cmOut").innerHTML = `${r.best ? `<div class="callout teal">Cheapest: <b>${M.load[r.best.load].name} → ${M.discharge[r.best.disch].name}</b> by ${r.best.best_class} at <b>$${fmt(r.best.landed_mean, 2)}/t</b> landed. "Premium" is the freight-adjusted FOB break-even: another origin must be at least this much cheaper FOB to compete.</div>` : ""}
+        <div class="card"><h3><span class="h-l"><i></i>Landed $/t (P10-P90) by lane</span></h3><div id="cmPlot" class="plot"></div></div>
+        <div class="card"><div class="tw"><table><thead><tr><th class="l">Lane</th><th>Class</th><th>Parcel t</th><th>Voy</th><th>Landed $/t</th><th>P10-P90</th><th>CVaR90</th><th>Premium</th><th>COA/TC/Spot</th><th>$M</th></tr></thead><tbody>
+        ${r.rows.map(x => x.ok ? `<tr><td class="l">${M.load[x.load].name.split(" (")[0]} → ${M.discharge[x.disch].name.split(" (")[0]}</td><td><span class="pill" style="color:${COL[x.best_class]}">${x.best_class}</span></td><td>${fmt(x.parcel_t)}</td><td>${x.voyages}</td>
+          <td class="mono"><b>$${fmt(x.landed_mean, 2)}</b></td><td class="mono">${fmt(x.landed_p10, 2)}-${fmt(x.landed_p90, 2)}</td><td class="mono">$${fmt(x.cvar90, 2)}</td><td class="mono ${x.premium_vs_best ? "warn" : "ok"}">+$${fmt(x.premium_vs_best, 2)}</td>
+          <td class="mono">${pct(x.mix.coa)}/${pct(x.mix.tc)}/${pct(x.mix.spot)}</td><td class="mono">${fmt(x.programme_musd, 1)}</td></tr>`
+          : `<tr><td class="l">${x.load} → ${x.disch}</td><td class="no" colspan="9">${x.message}</td></tr>`).join("")}</tbody></table></div></div>`;
+      PL("cmPlot", [{type: "bar", x: ok.map(lbl), y: ok.map(x => x.landed_mean), marker: {color: ok.map(x => COL[x.best_class])},
+        error_y: {type: "data", symmetric: false, array: ok.map(x => x.landed_p90 - x.landed_mean), arrayminus: ok.map(x => x.landed_mean - x.landed_p10), color: "#e6f1ff"},
+        text: ok.map(x => x.best_class), hovertemplate: "%{x}: $%{y:.2f}/t<extra>%{text}</extra>"}], {yaxis: {title: "$/t landed"}});
+    };
+    $("#cmRun").click();
   }
 
   header(); route();

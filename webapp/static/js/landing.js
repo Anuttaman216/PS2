@@ -256,6 +256,10 @@
   const PLAN_BODY = {load: "HAY_POINT", disch: "PARADIP", volume: 900000, duration: 13, lead: 3};
   const MODS = [
     {ico: "⛴", t: "Plan a Charter", d: "Enter cargo, origin, port and duration. Get the vessel, parcel, COA/TC/spot mix, charter ladder, entry timing and a broker-quote X-ray.", m: "POST", ep: "/api/plan", href: "/app#/plan", body: PLAN_BODY},
+    {ico: "⇄", t: "Compare Lanes", d: "Rank every origin into a port, or every port from an origin, by landed $/t with P10-P90. This gives the freight-adjusted FOB break-even for procurement.", m: "POST", ep: "/api/compare", href: "/app#/compare",
+      body: {lanes: [{load: "HAY_POINT", disch: "PARADIP"}, {load: "NACALA", disch: "PARADIP"}]}},
+    {ico: "▤", t: "Programmes & Ledger", d: "Store SAIL cargo requirements, plan them, and record accept or reject decisions in an audit ledger with printable charter notes and CSV export.", m: "GET", ep: "/api/programmes", href: "/app#/ops"},
+    {ico: "⛁", t: "Data Hub", d: "Download the template, upload real weekly freight history, and retrain the forecaster and backtest on it with live progress.", m: "GET", ep: "/api/data/status", href: "/app#/data"},
     {ico: "∿", t: "Market Forecast", d: "P10-P90 fans for 4 vessel classes over 1-26 weeks, with ensemble weights, accuracy vs random walk and explainability.", m: "GET", ep: "/api/forecast/Capesize", href: "/app#/forecast"},
     {ico: "⚓", t: "Port-Vessel Feasibility", d: "Draft, LOA, beam, stockyard and chokepoint checks for every class, plus the all-port matrix and two-port discharge.", m: "GET", ep: "/api/feasibility", href: "/app#/feasibility"},
     {ico: "⚠", t: "Risk & Early Warnings", d: "Volatility regime, spike/crash odds, turning points, congestion outlook and news events mapped to lanes.", m: "GET", ep: "/api/risk", href: "/app#/risk"},

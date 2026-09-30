@@ -351,3 +351,16 @@ pip install numpy pandas scipy scikit-learn lightgbm plotly
 python run_pipeline.py          # ~15 min first run, cached afterwards; --fast for a quicker demo
 open outputs/dashboard.html     (self-contained ~5 MB, plotly inlined, works offline)
 ```
+
+---
+
+## 14. Implementation: the working prototype
+
+The design is implemented as a full-stack application (see README.md for commands):
+
+* **Backend:** FastAPI with **35 REST endpoints** (`webapp/server.py`, `webapp/ops.py`). Decisions are computed live per request: the physics feasibility check, 150-scenario landed cost, and the CVaR Charter-Ladder LP solved with HiGHS in about 30 ms.
+* **Persistence:** SQLite (`webapp/store.py`) for cargo programmes, a **decision ledger** and ingested events. Each ledger entry stores an input hash, the data version and a full request/response snapshot, alongside the officer's decision and the actual fixed rate for ex-post regret tracking. The ledger produces a printable **charter note** and a CSV export. Together these form the audit trail described in §9 and §11.
+* **Real-data path:** `GET /api/data/template` → `POST /api/data/upload` (validated; missing drivers proxy-filled and labelled) → `POST /api/pipeline/run?source=uploaded` retrains the forecaster, re-tunes on an automatic validation split, and re-runs the backtest and placebo, with a live stage log. Every page then reads the uploaded dataset.
+* **Event intelligence:** `POST /api/events/ingest` turns free text into a typed event (rules, or Claude structured output) that is mapped to the impacted SAIL lanes and persisted.
+* **Quality:** `tests/test_api.py` exercises every endpoint, including error paths, against a temporary DB. Results are 11/11 passing.
+* **Frontend:** an animated landing page and a 12-page cockpit (plan, compare, forecast, feasibility, risk, idle, programmes & ledger, data hub, backtest, network, API explorer). It works offline.

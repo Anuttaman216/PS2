@@ -48,7 +48,8 @@ def check(cls, load_code, disch_code, monsoon=False, stem_t=None, avoid_chokepoi
     nm, routing = r["nm"], list(r["routing"])
     if any(c in avoid_chokepoints for c in routing) and r.get("alt"):
         nm, routing = r["alt"]["nm"], list(r["alt"]["routing"])
-        notes.append("re-routed to avoid " + ",".join(avoid_chokepoints))
+        via = " / ".join(x.replace("_", " ").title() for x in routing)
+        notes.append(f"re-routed via {via} to avoid {', '.join(avoid_chokepoints)} (+{r['alt']['nm'] - r['nm']:,} nm)")
     nm += dp["offset_nm"]
     drafts = {"load port": lp["max_draft_m"],
               "discharge port": dp["max_draft_m"] + (dp["monsoon_draft_delta"] if monsoon else 0.0)}

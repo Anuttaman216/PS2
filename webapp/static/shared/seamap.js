@@ -203,7 +203,7 @@
       this.hover = null;
       for (const [code, p] of Object.entries(PORTS)) {
         const [x, y] = this.proj(p.ll), dest = p.role === "dest";
-        const ph = (t * 0.8 + x * 0.01) % 1;
+        const ph = (((t * 0.8 + x * 0.01) % 1) + 1) % 1;   // keep in [0,1) even for off-canvas (negative x) ports
         g.strokeStyle = dest ? `rgba(251,191,36,${0.8 * (1 - ph)})` : `rgba(56,189,248,${0.7 * (1 - ph)})`; g.lineWidth = 1.2;
         g.beginPath(); g.arc(x, y, 3 + ph * (dest ? 16 : 12), 0, 6.283); g.stroke();
         g.fillStyle = dest ? "#fbbf24" : "#7dd3fc"; g.beginPath(); g.arc(x, y, dest ? 3.2 : 2.6, 0, 6.283); g.fill();

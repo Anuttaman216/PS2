@@ -10,3 +10,6 @@ Thumbs.db
 # Claude Code local settings (keep the shared launch.json)
 .claude/*
 !.claude/launch.json
+# runtime state (created on first start)
+outputs/freightsaarthi.db
+data/

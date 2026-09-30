@@ -36,6 +36,15 @@ CACHE = OUT / "cache"
 CACHE.mkdir(exist_ok=True)
 
 
+PROGRESS = None          # optional callback(str) set by the web server to report stages
+
+
+def log(msg):
+    print(msg, flush=True)
+    if PROGRESS:
+        PROGRESS(msg.strip())
+
+
 def cached(name, fn, use=True):
     f = CACHE / f"{name}.pkl"
     if use and f.exists():
@@ -68,22 +77,22 @@ def forecast_report(fc, start):
     return rows
 
 
-def tune(bt, grid):
-    best, log = None, []
+def tune(bt, grid, val=VAL):
+    best, tlog = None, []
     for lam in grid["lam"]:
         for delta in grid["delta"]:
             for step in grid["step"]:
-                r = bt.run(*VAL, lam=lam, delta=delta, step_cap=step, strategies=("FS",))
+                r = bt.run(*val, lam=lam, delta=delta, step_cap=step, strategies=("FS",))
                 c = r["FS_cost_t"].values
                 T = r["FS_tonnes"].values
                 q = np.quantile(c, 0.9)
                 score = (c * T).sum() / T.sum() + 0.25 * c[c >= q].mean()
-                log.append({"lam": lam, "delta": delta, "step": step, "avg": float((c * T).sum() / T.sum()),
+                tlog.append({"lam": lam, "delta": delta, "step": step, "avg": float((c * T).sum() / T.sum()),
                             "cvar90": float(c[c >= q].mean()), "score": float(score)})
                 if best is None or score < best["score"]:
-                    best = log[-1]
-                print(f"   tune lam={lam} delta={delta} step={step}: score {score:.3f}")
-    return best, log
+                    best = tlog[-1]
+                log(f"   tune lam={lam} delta={delta} step={step}: score {score:.3f}")
+    return best, tlog
 
 
 def todays_recommendation(df, meta, fc, lane, params):
@@ -142,16 +151,29 @@ def todays_recommendation(df, meta, fc, lane, params):
             "two_port_example": PH.two_port_discharge("Capesize", "HAY_POINT", "DHAMRA", "PARADIP")}, paths
 
 
-def main(fast=False):
+def main(fast=False, source="synthetic"):
+    """source = 'synthetic' (default demo world) or 'uploaded' (data/uploaded_market.csv via POST /api/data/upload)."""
     T0 = time.time()
     refit = 26 if fast else 13
-    print("[1] generating synthetic worlds")
-    df, meta = generate("structured")
-    dfp, metap = generate("martingale", seed=23)
-    s0 = int(np.searchsorted(df.index, pd.Timestamp(FC_START)))
+    log("[1] loading market data (" + source + ")")
+    dfp, metap = generate("martingale", seed=23)          # placebo world is always synthetic
+    if source == "uploaded":
+        from saarthi.data import load_uploaded, windows
+        df, meta, prov = load_uploaded()
+        fc_start, val, test = windows(df)
+        tag = f"up_{prov['sha1']}_"
+        filled = ", ".join(prov["filled_from_proxy"][:4]) + (" ..." if len(prov["filled_from_proxy"]) > 4 else "")
+        data_label = (f"UPLOADED DATA ({prov['rows']} weeks {prov['start']}..{prov['end']})"
+                      + (f" - proxy-filled: {filled}" if prov["filled_from_proxy"] else ""))
+    else:
+        df, meta = generate("structured")
+        fc_start, val, test, tag = FC_START, VAL, TEST, ""
+        data_label = "SYNTHETIC (structured world, seed 11) - demo only"
+    s0 = int(np.searchsorted(df.index, pd.Timestamp(fc_start)))
+    s0p = int(np.searchsorted(dfp.index, pd.Timestamp(FC_START)))
 
-    print("[2] walk-forward forecasts (ensemble)")
-    fc, fobj = cached(f"fc_{refit}", lambda: walk_forward(df, s0, refit_every=refit, verbose=False))
+    log("[2] walk-forward forecasts (ensemble)")
+    fc, fobj = cached(f"{tag}fc_{refit}", lambda: walk_forward(df, s0, refit_every=refit, verbose=False))
     from saarthi.forecast import FEATS, STRUCT_FEATS
     explain = {}
     for h in (4, 12):
@@ -160,36 +182,36 @@ def main(fast=False):
         beta = fobj.models[h]["struct"][0]
         explain[f"h{h}"] = {"gbm_gain_pct": imp,
                             "struct_coef": list(zip(["const"] + STRUCT_FEATS, np.round(beta[:1 + len(STRUCT_FEATS)], 4).tolist()))}
-    print("    ... random-walk-only forecasts (ablation)")
-    fc_rw, _ = cached(f"fcrw_{refit}", lambda: walk_forward(df, s0, refit_every=refit, members=("rw",), verbose=False))
-    print("    ... placebo world forecasts")
-    fcp, _ = cached("fcp", lambda: walk_forward(dfp, s0, refit_every=26, verbose=False))
+    log("    ... random-walk-only forecasts (ablation)")
+    fc_rw, _ = cached(f"{tag}fcrw_{refit}", lambda: walk_forward(df, s0, refit_every=refit, members=("rw",), verbose=False))
+    log("    ... placebo world forecasts")
+    fcp, _ = cached("fcp", lambda: walk_forward(dfp, s0p, refit_every=26, verbose=False))
 
-    print("[3] forecast accuracy report")
-    frep = forecast_report(fc, TEST[0])
+    log("[3] forecast accuracy report")
+    frep = forecast_report(fc, test[0])
     frep_p = forecast_report(fcp, TEST[0])
 
     lane = Lane("HAY_POINT", "PARADIP", Q=900_000)
     bt = Backtest(df, meta, fc, lane)
-    print("[4] decision-focused calibration on validation period")
+    log("[4] decision-focused calibration on validation period")
     grid = {"lam": [0.0, 0.5, 1.5], "delta": [0.0, 0.03], "step": [0.2, 0.35]}
     if fast:
         grid = {"lam": [0.0, 0.5], "delta": [0.0, 0.03], "step": [0.35]}
-    best, tune_log = cached(f"tune_{fast}", lambda: tune(bt, grid))
-    print("    selected:", best)
+    best, tune_log = cached(f"{tag}tune_{fast}", lambda: tune(bt, grid, val))
+    log(f"    selected: {best}")
 
-    print("[5] test-period backtest")
-    res = cached(f"res_{fast}", lambda: bt.run(*TEST, lam=best["lam"], delta=best["delta"], step_cap=best["step"]))
+    log("[5] test-period backtest")
+    res = cached(f"{tag}res_{fast}", lambda: bt.run(*test, lam=best["lam"], delta=best["delta"], step_cap=best["step"]))
     summ = summarise(res)
 
-    print("[6] ablations")
-    res_rw = cached(f"resrw_{fast}", lambda: Backtest(df, meta, fc_rw, lane).run(*TEST, lam=best["lam"], delta=best["delta"], step_cap=best["step"],
+    log("[6] ablations")
+    res_rw = cached(f"{tag}resrw_{fast}", lambda: Backtest(df, meta, fc_rw, lane).run(*test, lam=best["lam"], delta=best["delta"], step_cap=best["step"],
                                                 strategies=("B0", "B1", "B2", "FS")))
     summ_rw = summarise(res_rw, strategies=("B0", "B1", "B2", "FS"))
-    res_p = cached(f"resp_{fast}", lambda: Backtest(dfp, metap, fcp, lane).run(*TEST, lam=best["lam"], delta=best["delta"], step_cap=best["step"]))
+    res_p = cached(f"{tag}resp_{fast}", lambda: Backtest(dfp, metap, fcp, lane).run(*TEST, lam=best["lam"], delta=best["delta"], step_cap=best["step"]))
     summ_p = summarise(res_p)
 
-    print("[7] today's recommendation, alerts, generalisation")
+    log("[7] today's recommendation, alerts, generalisation")
     rec, paths = todays_recommendation(df, meta, fc, lane, best)
     fc_now = fc[fc.t == len(df) - 1]
     alerts = AL.market_alerts(df, fc_now, paths) + AL.congestion_alerts(df)
@@ -219,7 +241,7 @@ def main(fast=False):
                   "p90": np.quantile(p, .9, axis=0).round(0).tolist(),
                   "weights": {m: float(fc_now[fc_now.cls == ci][f"w_{m}"].mean()) for m in ("gbm", "struct", "rw")}}
     payload = {
-        "meta": {"asof": rec["asof"], "data_label": "SYNTHETIC (structured world, seed 11) - demo only",
+        "meta": {"asof": rec["asof"], "data_label": data_label, "source": source, "test_window": test, "val_window": val,
                  "runtime_s": None, "selected_params": best, "tune_log": tune_log},
         "vessels": VESSELS, "discharge": DISCHARGE, "load": LOAD, "routes": {k: v for k, v in ROUTES.items() if not k.startswith("_")},
         "chokepoints": CHOKEPOINTS, "commercial": COMMERCIAL,
@@ -242,7 +264,7 @@ def main(fast=False):
     pd.DataFrame(frep).to_csv(OUT / "forecast_accuracy.csv", index=False)
     from build_dashboard import build
     build(payload)
-    print(f"done in {time.time() - T0:.0f}s -> outputs/results.json, outputs/dashboard.html")
+    log(f"done in {time.time() - T0:.0f}s -> outputs/results.json, outputs/dashboard.html")
     print(json.dumps({k: {kk: (round(vv, 2) if isinstance(vv, float) else vv) for kk, vv in v.items()} for k, v in summ.items()}, indent=1))
     print("placebo FS vs B1:", round(summ_p["FS"]["avg_cost_usd_t"], 3), round(summ_p["B1"]["avg_cost_usd_t"], 3))
     print("RW-ablation FS:", round(summ_rw["FS"]["avg_cost_usd_t"], 3))
@@ -251,4 +273,6 @@ def main(fast=False):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--fast", action="store_true")
-    main(ap.parse_args().fast)
+    ap.add_argument("--source", choices=["synthetic", "uploaded"], default="synthetic")
+    a = ap.parse_args()
+    main(a.fast, a.source)
