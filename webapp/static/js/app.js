@@ -49,7 +49,10 @@
     const L = {...base, ...lay, xaxis: {...base.xaxis, ...(lay.xaxis || {})}, yaxis: {...base.yaxis, ...(lay.yaxis || {})}};
     Plotly.react(el, data, L, {displayModeBar: false, responsive: true, ...extra});
   };
-  const countUp = (root = document) => root.querySelectorAll("[data-num]").forEach(el => {
+  // ?shot=1 -> screenshot/print mode: no animations, final values immediately (used for slide/PDF captures)
+  const SHOT = /[?&]shot=1/.test(location.search);
+  if (SHOT) document.documentElement.classList.add("shot");
+  const countUp = (root = document) => SHOT ? null : root.querySelectorAll("[data-num]").forEach(el => {
     const t = +el.dataset.num, d = +(el.dataset.dec || 0), pre = el.dataset.pre || "", suf = el.dataset.suf || "", st = performance.now();
     const f = now => { const k = Math.min(1, (now - st) / 1100), e = 1 - Math.pow(1 - k, 3); el.textContent = pre + fmt(t * e, d) + suf; if (k < 1) requestAnimationFrame(f); };
     requestAnimationFrame(f);

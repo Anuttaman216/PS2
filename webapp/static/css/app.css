@@ -137,3 +137,7 @@ pre.json .k{color:#7dd3fc}pre.json .s{color:#a7f3d0}pre.json .n{color:#fcd34d}pr
 .fit-svg .depth-scale text{fill:rgba(186,230,253,.5);font:10px var(--f-mono)}.fit-svg .depth-scale line{stroke:rgba(186,230,253,.25)}
 @keyframes waveX{from{transform:translateX(0)}to{transform:translateX(-100px)}}
 .fit-svg .wave{animation:waveX 6s linear infinite}.fit-svg .rip{animation:waveX 9s linear infinite}
+
+/* screenshot / print mode (?shot=1): freeze motion so captures show final values */
+html.shot *,html.shot *::before,html.shot *::after{animation:none!important;transition:none!important}
+html.shot .view.enter>*{opacity:1;transform:none;filter:none}
