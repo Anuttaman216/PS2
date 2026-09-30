@@ -4,6 +4,8 @@ An intelligent freight forecasting and charter decision system for bulk coal imp
 
 * **Design document (the full answer):** [docs/DESIGN.md](docs/DESIGN.md)
 * **SIH demo script + judge Q&A:** [docs/DEMO.md](docs/DEMO.md)
+* **Video voiceover script (PPT + prototype, ~7-8 min):** [docs/VIDEO_SCRIPT.md](docs/VIDEO_SCRIPT.md)
+* **Idea presentation (PDF / PPTX):** [docs/presentation/](docs/presentation/)
 * **Problem statement:** [docs/PROBLEM_STATEMENT.md](docs/PROBLEM_STATEMENT.md)
 * **Working with Claude / AI assistants:** [CLAUDE.md](CLAUDE.md) holds the full project context (architecture, formulas, API, conventions, decision log)
 * **Pilot lane:** Hay Point (Australia) → Paradip, on clearly labelled **synthetic** data. Every other origin and port works through the same code, and real data can be uploaded in the Data Hub.
